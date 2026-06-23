@@ -189,6 +189,29 @@ main {
 }
 
 /* ── Search bar ──────────────────────────────────────────── */
+
+.recent-city-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: -8px;
+}
+
+.recent-city-btn {
+  border: 1px solid var(--border);
+  background: #a08bff;
+  padding: 6px 12px;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.recent-city-clear {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+}
+
 .search-wrap {
   display: flex;
   gap: 0.5rem;

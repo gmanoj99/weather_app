@@ -18,6 +18,9 @@ const weatherCard   = document.getElementById('weatherCard');
 const forecastStrip = document.getElementById('forecastStrip');
 const hourlyCard    = document.getElementById('hourlyCard');
 const clearCityBtn  = document.getElementById('clearCityBtn');
+const recentCityContainer = document.getElementById('recentCityContainer');
+const recentCityBtn = document.getElementById('recentCityBtn');
+const clearStoredCityBtn = document.getElementById('clearStoredCityBtn');
 
 /* ── Theme system ────────────────────────────────────────── */
 function applyTheme(theme) {
@@ -53,13 +56,41 @@ function showError(message) {
 
 /* ── Search handlers ─────────────────────────────────────── */
 searchBtn.addEventListener('click', handleSearch);
+searchInput.addEventListener('focus', () => {
+  const lastCity = localStorage.getItem('wa-last-city');
+
+  if (lastCity) {
+    recentCityBtn.textContent = lastCity;
+    recentCityContainer.style.display = 'flex';
+  }
+});
+recentCityBtn.addEventListener('click', () => {
+  const city = localStorage.getItem('wa-last-city');
+
+  if (city) {
+    loadWeather(city);
+    recentCityContainer.style.display = 'none';
+  }
+});
+clearStoredCityBtn.addEventListener('click', () => {
+  localStorage.removeItem('wa-last-city');
+
+  recentCityContainer.style.display = 'none';
+  searchInput.value = '';
+
+  showState('empty');
+});
+
 searchInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') handleSearch();
 });
 
 clearCityBtn.addEventListener('click', () => {
   localStorage.removeItem('wa-last-city');
+
   searchInput.value = '';
+  recentCityContainer.style.display = 'none';
+
   showState('empty');
 });
 
@@ -350,8 +381,8 @@ function renderHourly(entries) {
 
 /* ── Init ────────────────────────────────────────────────── */
 const lastCity = localStorage.getItem('wa-last-city');
+
 if (lastCity) {
-  searchInput.value = lastCity;
   loadWeather(lastCity);
 } else {
   showState('empty');
