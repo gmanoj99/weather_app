@@ -18,9 +18,9 @@ const weatherCard   = document.getElementById('weatherCard');
 const forecastStrip = document.getElementById('forecastStrip');
 const hourlyCard    = document.getElementById('hourlyCard');
 const clearCityBtn  = document.getElementById('clearCityBtn');
-const recentCityContainer = document.getElementById('recentCityContainer');
-const recentCityBtn = document.getElementById('recentCityBtn');
-const clearStoredCityBtn = document.getElementById('clearStoredCityBtn');
+// const recentCityContainer = document.getElementById('recentCityContainer');
+// const recentCityBtn = document.getElementById('recentCityBtn');
+// const clearStoredCityBtn = document.getElementById('clearStoredCityBtn');
 
 /* ── Theme system ────────────────────────────────────────── */
 function applyTheme(theme) {
@@ -56,30 +56,30 @@ function showError(message) {
 
 /* ── Search handlers ─────────────────────────────────────── */
 searchBtn.addEventListener('click', handleSearch);
-searchInput.addEventListener('focus', () => {
-  const lastCity = localStorage.getItem('wa-last-city');
+// searchInput.addEventListener('focus', () => {
+//   const lastCity = localStorage.getItem('wa-last-city');
 
-  if (lastCity) {
-    recentCityBtn.textContent = lastCity;
-    recentCityContainer.style.display = 'flex';
-  }
-});
-recentCityBtn.addEventListener('click', () => {
-  const city = localStorage.getItem('wa-last-city');
+//   if (lastCity) {
+//     recentCityBtn.textContent = lastCity;
+//     recentCityContainer.style.display = 'flex';
+//   }
+// });
+// recentCityBtn.addEventListener('click', () => {
+//   const city = localStorage.getItem('wa-last-city');
 
-  if (city) {
-    loadWeather(city);
-    recentCityContainer.style.display = 'none';
-  }
-});
-clearStoredCityBtn.addEventListener('click', () => {
-  localStorage.removeItem('wa-last-city');
+//   if (city) {
+//     loadWeather(city);
+//     recentCityContainer.style.display = 'none';
+//   }
+// });
+// clearStoredCityBtn.addEventListener('click', () => {
+//   localStorage.removeItem('wa-last-city');
 
-  recentCityContainer.style.display = 'none';
-  searchInput.value = '';
+//   recentCityContainer.style.display = 'none';
+//   searchInput.value = '';
 
-  showState('empty');
-});
+//   showState('empty');
+// });
 
 searchInput.addEventListener('keydown', e => {
   if (e.key === 'Enter') handleSearch();
@@ -87,10 +87,7 @@ searchInput.addEventListener('keydown', e => {
 
 clearCityBtn.addEventListener('click', () => {
   localStorage.removeItem('wa-last-city');
-
   searchInput.value = '';
-  recentCityContainer.style.display = 'none';
-
   showState('empty');
 });
 
@@ -156,8 +153,11 @@ async function fetchForecast(latitude, longitude) {
 
 /* ── Main load function ──────────────────────────────────── */
 async function loadWeather(city) {
+  searchBtn.disabled = true;
+  searchInput.disabled = true;
   showState('loading');
-
+  searchBtn.disabled = false;
+  searchInput.disabled = false;
   try {
     // 1. Resolve city → coordinates
     const location = await geocodeCity(city);

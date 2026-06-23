@@ -2,7 +2,12 @@
    Weather App — Styles
    Milestone 3: Weather card + temperature accent colors
    ============================================================ */
-
+   * {
+    transition:
+      background-color 0.25s ease,
+      color 0.25s ease,
+      border-color 0.25s ease;
+  }
 /* ── Design Tokens (Light mode) ──────────────────────────── */
 :root {
   --c-teal:       #1D9E75;
@@ -74,6 +79,31 @@
 
   --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.35);
+}
+
+
+@media (max-width: 479px) {
+
+  .header-inner {
+    flex-wrap: wrap;
+    height: auto;
+    padding: 12px 16px;
+    gap: 12px;
+  }
+
+  nav {
+    width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  nav a {
+    white-space: nowrap;
+  }
 }
 
 /* ── Reset & Base ────────────────────────────────────────── */
@@ -190,8 +220,8 @@ main {
 
 /* ── Search bar ──────────────────────────────────────────── */
 
-.recent-city-container {
-  display: flex;
+/* .recent-city-container { */
+  /* display: flex;
   align-items: center;
   gap: 8px;
   margin-top: -8px;
@@ -210,7 +240,7 @@ main {
   background: none;
   cursor: pointer;
   color: var(--text-muted);
-}
+} */
 
 .search-wrap {
   display: flex;
@@ -447,6 +477,64 @@ main {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 0.5rem;
+}
+@media (max-width: 479px) {
+
+  .forecast-strip {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 4px;
+  }
+
+  .forecast-day {
+    min-width: 90px;
+    flex-shrink: 0;
+  }
+}
+@media (min-width: 480px) and (max-width: 767px) {
+
+  .weather-card {
+    flex-direction: column;
+  }
+
+  .weather-right {
+    width: 100%;
+  }
+
+  .forecast-strip {
+    grid-template-columns: repeat(5, 1fr);
+  }
+}
+.card {
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+.forecast-day:hover {
+  transform: translateY(-2px);
+}
+.search-btn:focus-visible,
+.theme-btn:focus-visible,
+.clear-city-btn:focus-visible {
+  outline: 3px solid rgba(29,158,117,.3);
+  outline-offset: 2px;
+}
+
+.search-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.search-input:disabled {
+  opacity: 0.7;
 }
 
 .forecast-day {
