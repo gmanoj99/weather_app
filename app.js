@@ -1,7 +1,6 @@
 /* ============================================================
    Weather App — JavaScript
-   Milestone 1: Theme system + UI state management
-   Milestone 2: Will add Open-Meteo API integration here
+   Milestone 2: Open-Meteo API integration
    ============================================================ */
 
 /* ── DOM refs ────────────────────────────────────────────── */
@@ -67,119 +66,204 @@ clearCityBtn.addEventListener('click', () => {
 function handleSearch() {
   const city = searchInput.value.trim();
   if (!city) return;
-  localStorage.setItem('wa-last-city', city);
   loadWeather(city);
 }
 
-/* ── Weather loading ─────────────────────────────────────── */
-// Milestone 1: shows placeholder UI so all panels are visible.
-// Milestone 2: replace this with a real Open-Meteo API call.
-function loadWeather(city) {
-  showState('loading');
+/* ── API layer ───────────────────────────────────────────── */
+const GEO_URL      = 'https://geocoding-api.open-meteo.com/v1/search';
+const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
 
-  // TODO (M2): geocode city → fetch Open-Meteo data → call renderWeather(data)
-  // For now, show placeholder after a brief delay so the spinner is visible.
-  setTimeout(() => {
-    renderPlaceholder(city);
-  }, 600);
+/**
+ * Step 1 — Geocode city name → { name, country, latitude, longitude }
+ */
+async function geocodeCity(city) {
+  const url = `${GEO_URL}?name=${encodeURIComponent(city)}&count=1&language=en&format=json`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error('Geocoding service unavailable. Please try again.');
+
+  const data = await res.json();
+  if (!data.results || data.results.length === 0) {
+    throw new Error(`City "${city}" not found. Check the spelling and try again.`);
+  }
+
+  const { name, country, latitude, longitude } = data.results[0];
+  return { name, country, latitude, longitude };
 }
 
-/* ── Placeholder render (removed in M2) ─────────────────── */
-function renderPlaceholder(city) {
-  document.getElementById('cityName').textContent = city;
-  document.getElementById('dateText').textContent =
-    new Date().toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' });
-  document.getElementById('tempValue').textContent   = '–';
-  document.getElementById('conditionText').textContent = 'Loading…';
-  document.getElementById('humidity').textContent    = '–';
-  document.getElementById('windSpeed').textContent   = '–';
-  document.getElementById('pressure').textContent    = '–';
+/**
+ * Step 2 — Fetch forecast for given coordinates
+ * Returns raw Open-Meteo response.
+ */
+async function fetchForecast(latitude, longitude) {
+  const params = new URLSearchParams({
+    latitude,
+    longitude,
+    current: [
+      'temperature_2m',
+      'relative_humidity_2m',
+      'wind_speed_10m',
+      'surface_pressure',
+      'weather_code',
+    ].join(','),
+    hourly: [
+      'temperature_2m',
+      'weather_code',
+    ].join(','),
+    daily: [
+      'weather_code',
+      'temperature_2m_max',
+      'temperature_2m_min',
+    ].join(','),
+    timezone: 'auto',
+    forecast_days: 5,
+  });
 
-  renderForecastPlaceholder();
-  renderHourlyPlaceholder();
-  showState('data');
+  const res = await fetch(`${FORECAST_URL}?${params}`);
+  if (!res.ok) throw new Error('Weather service unavailable. Please try again.');
+  return res.json();
+}
+
+/* ── Main load function ──────────────────────────────────── */
+async function loadWeather(city) {
+  showState('loading');
+
+  try {
+    // 1. Resolve city → coordinates
+    const location = await geocodeCity(city);
+
+    // 2. Fetch forecast data
+    const forecast = await fetchForecast(location.latitude, location.longitude);
+
+    // 3. Persist and render
+    localStorage.setItem('wa-last-city', city);
+    renderWeather(location, forecast);
+    showState('data');
+
+    console.log('[WeatherApp] Location:', location);
+    console.log('[WeatherApp] Forecast:', forecast);
+
+  } catch (err) {
+    console.error('[WeatherApp] Error:', err);
+    showError(err.message || 'Something went wrong. Please try again.');
+  }
+}
+
+/* ── Data transform + render ─────────────────────────────── */
+function renderWeather(location, data) {
+  const { current, hourly, daily, timezone } = data;
+
+  // ── Current weather card ──
+  const condition = wmoToCondition(current.weather_code);
+  const now = new Date();
+
+  document.getElementById('cityName').textContent =
+    `${location.name}, ${location.country}`;
+  document.getElementById('dateText').textContent =
+    now.toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' });
+  document.getElementById('tempValue').textContent =
+    Math.round(current.temperature_2m);
+  document.getElementById('conditionText').textContent = condition.label;
+  document.getElementById('humidity').textContent =
+    `${current.relative_humidity_2m}%`;
+  document.getElementById('windSpeed').textContent =
+    `${Math.round(current.wind_speed_10m)} km/h`;
+  document.getElementById('pressure').textContent =
+    `${Math.round(current.surface_pressure)} hPa`;
+
+  // Update condition icon in the card
+  document.getElementById('conditionIcon').outerHTML =
+    `<svg id="conditionIcon" viewBox="0 0 24 24" style="width:20px;height:20px;fill:none;stroke:var(--c-teal);stroke-width:1.6;stroke-linecap:round;">${SVG_PATHS[condition.icon]}</svg>`;
+
+  // ── 5-day forecast strip ──
+  const days = daily.time.slice(0, 5).map((dateStr, i) => ({
+    label: i === 0 ? 'TODAY' : new Date(dateStr + 'T00:00:00')
+      .toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase(),
+    icon:  wmoToCondition(daily.weather_code[i]).icon,
+    hi:    Math.round(daily.temperature_2m_max[i]),
+    lo:    Math.round(daily.temperature_2m_min[i]),
+  }));
+  renderForecast(days);
+
+  // ── Hourly panel — next 6 hours from now ──
+  const currentHour = now.getHours();
+  const hourlyEntries = [];
+
+  for (let i = 0; i < hourly.time.length && hourlyEntries.length < 6; i++) {
+    const hour = new Date(hourly.time[i]).getHours();
+    const date = new Date(hourly.time[i]);
+    // Only future hours today
+    if (date.toDateString() !== now.toDateString()) continue;
+    if (hour <= currentHour) continue;
+
+    const cond = wmoToCondition(hourly.weather_code[i]);
+    hourlyEntries.push({
+      time: `${String(hour).padStart(2, '0')}:00`,
+      icon: cond.icon,
+      cond: cond.label,
+      temp: `${Math.round(hourly.temperature_2m[i])}°C`,
+    });
+  }
+
+  // If fewer than 6 future hours today, pad from next day
+  if (hourlyEntries.length < 6) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    for (let i = 0; i < hourly.time.length && hourlyEntries.length < 6; i++) {
+      const date = new Date(hourly.time[i]);
+      if (date.toDateString() !== tomorrow.toDateString()) continue;
+
+      const cond = wmoToCondition(hourly.weather_code[i]);
+      hourlyEntries.push({
+        time: `${String(date.getHours()).padStart(2, '0')}:00`,
+        icon: cond.icon,
+        cond: cond.label,
+        temp: `${Math.round(hourly.temperature_2m[i])}°C`,
+      });
+    }
+  }
+
+  renderHourly(hourlyEntries);
 }
 
 /* ── SVG icon helpers ────────────────────────────────────── */
-// These will be reused by M2 when rendering real WMO weather codes.
-const SVG = {
-  cloud: (size = 22) =>
-    `<svg viewBox="0 0 24 24" style="width:${size}px;height:${size}px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;">
-      <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 0 1 0 9z"/>
-    </svg>`,
-
-  sun: (size = 22) =>
-    `<svg viewBox="0 0 24 24" style="width:${size}px;height:${size}px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;">
-      <circle cx="12" cy="12" r="5"/>
-      <line x1="12" y1="1" x2="12" y2="3"/>
-      <line x1="12" y1="21" x2="12" y2="23"/>
-      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
-      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
-      <line x1="1" y1="12" x2="3" y2="12"/>
-      <line x1="21" y1="12" x2="23" y2="12"/>
-      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
-      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
-    </svg>`,
-
-  rain: (size = 22) =>
-    `<svg viewBox="0 0 24 24" style="width:${size}px;height:${size}px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;">
-      <path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/>
-      <line x1="8" y1="19" x2="8" y2="21"/>
-      <line x1="12" y1="18" x2="12" y2="22"/>
-      <line x1="16" y1="19" x2="16" y2="21"/>
-    </svg>`,
-
-  snow: (size = 22) =>
-    `<svg viewBox="0 0 24 24" style="width:${size}px;height:${size}px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;">
-      <line x1="12" y1="2" x2="12" y2="22"/>
-      <path d="m20 7-8 5-8-5"/>
-      <path d="m20 17-8-5-8 5"/>
-    </svg>`,
-
-  thunder: (size = 22) =>
-    `<svg viewBox="0 0 24 24" style="width:${size}px;height:${size}px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;">
-      <path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9"/>
-      <polyline points="13 11 9 17 15 17 11 23"/>
-    </svg>`,
+// Inner path strings — reused in both inline card icon and HTML template
+const SVG_PATHS = {
+  sun:     `<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>`,
+  cloud:   `<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 0 1 0 9z"/>`,
+  rain:    `<path d="M20 16.58A5 5 0 0 0 18 7h-1.26A8 8 0 1 0 4 15.25"/><line x1="8" y1="19" x2="8" y2="21"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="16" y1="19" x2="16" y2="21"/>`,
+  snow:    `<line x1="12" y1="2" x2="12" y2="22"/><path d="m20 7-8 5-8-5"/><path d="m20 17-8-5-8 5"/>`,
+  thunder: `<path d="M19 16.9A5 5 0 0 0 18 7h-1.26a8 8 0 1 0-11.62 9"/><polyline points="13 11 9 17 15 17 11 23"/>`,
 };
 
-/* WMO weather code → { label, iconKey } mapping (used from M2 onwards) */
+const SVG = {
+  sun:     (size = 22) => svgWrap(SVG_PATHS.sun,     size),
+  cloud:   (size = 22) => svgWrap(SVG_PATHS.cloud,   size),
+  rain:    (size = 22) => svgWrap(SVG_PATHS.rain,    size),
+  snow:    (size = 22) => svgWrap(SVG_PATHS.snow,    size),
+  thunder: (size = 22) => svgWrap(SVG_PATHS.thunder, size),
+};
+
+function svgWrap(inner, size) {
+  return `<svg viewBox="0 0 24 24" style="width:${size}px;height:${size}px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;">${inner}</svg>`;
+}
+
+/* ── WMO code → condition ────────────────────────────────── */
 function wmoToCondition(code) {
-  if (code === 0)               return { label: 'Clear Sky',         icon: 'sun' };
-  if (code <= 2)                return { label: 'Partly Cloudy',     icon: 'cloud' };
-  if (code === 3)               return { label: 'Overcast',          icon: 'cloud' };
-  if (code <= 49)               return { label: 'Foggy',             icon: 'cloud' };
-  if (code <= 59)               return { label: 'Drizzle',           icon: 'rain' };
-  if (code <= 69)               return { label: 'Rain',              icon: 'rain' };
-  if (code <= 79)               return { label: 'Snow',              icon: 'snow' };
-  if (code <= 82)               return { label: 'Rain Showers',      icon: 'rain' };
-  if (code <= 86)               return { label: 'Snow Showers',      icon: 'snow' };
-  if (code <= 99)               return { label: 'Thunderstorm',      icon: 'thunder' };
-  return                               { label: 'Unknown',           icon: 'cloud' };
+  if (code === 0)        return { label: 'Clear Sky',      icon: 'sun' };
+  if (code <= 2)         return { label: 'Partly Cloudy',  icon: 'cloud' };
+  if (code === 3)        return { label: 'Overcast',       icon: 'cloud' };
+  if (code <= 49)        return { label: 'Foggy',          icon: 'cloud' };
+  if (code <= 59)        return { label: 'Drizzle',        icon: 'rain' };
+  if (code <= 69)        return { label: 'Rain',           icon: 'rain' };
+  if (code <= 79)        return { label: 'Snow',           icon: 'snow' };
+  if (code <= 82)        return { label: 'Rain Showers',   icon: 'rain' };
+  if (code <= 86)        return { label: 'Snow Showers',   icon: 'snow' };
+  if (code <= 99)        return { label: 'Thunderstorm',   icon: 'thunder' };
+  return                        { label: 'Unknown',        icon: 'cloud' };
 }
 
-/* ── Forecast strip ──────────────────────────────────────── */
-function getDayLabel(offset) {
-  if (offset === 0) return 'TODAY';
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return d.toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase();
-}
-
-// M1 placeholder — M2 will call renderForecast(days) with real data
-function renderForecastPlaceholder() {
-  const icons = ['cloud', 'cloud', 'sun', 'sun', 'cloud'];
-  forecastStrip.innerHTML = Array.from({ length: 5 }, (_, i) => `
-    <div class="forecast-day ${i === 0 ? 'today' : ''}">
-      <span class="forecast-label">${getDayLabel(i)}</span>
-      <div class="forecast-icon">${SVG[icons[i]]()}</div>
-      <span class="forecast-hi">–°</span>
-      <span class="forecast-lo">–°</span>
-    </div>
-  `).join('');
-}
-
-// M2 will call this with real data: days = [{ label, iconKey, hi, lo }]
+/* ── Forecast strip render ───────────────────────────────── */
 function renderForecast(days) {
   forecastStrip.innerHTML = days.map((d, i) => `
     <div class="forecast-day ${i === 0 ? 'today' : ''}">
@@ -191,22 +275,7 @@ function renderForecast(days) {
   `).join('');
 }
 
-/* ── Hourly panel ────────────────────────────────────────── */
-const HOURLY_PLACEHOLDER = [
-  { time: '14:00', icon: 'sun',   cond: 'High UV Index',         temp: '–' },
-  { time: '15:00', icon: 'cloud', cond: 'Developing Cumulus',    temp: '–' },
-  { time: '16:00', icon: 'cloud', cond: 'Gust Peak Recorded',    temp: '–' },
-  { time: '17:00', icon: 'cloud', cond: 'Stratus Coverage',      temp: '–' },
-  { time: '18:00', icon: 'rain',  cond: 'Precipitation Expected',temp: '–' },
-  { time: '19:00', icon: 'sun',   cond: 'Clear Dusk Horizon',    temp: '–' },
-];
-
-// M1 placeholder — M2 will call renderHourly(entries) with real data
-function renderHourlyPlaceholder() {
-  renderHourly(HOURLY_PLACEHOLDER);
-}
-
-// M2 will call this with real data: entries = [{ time, icon, cond, temp }]
+/* ── Hourly panel render ─────────────────────────────────── */
 function renderHourly(entries) {
   document.getElementById('hourlyList').innerHTML = entries.map(h => `
     <li class="hourly-item">
