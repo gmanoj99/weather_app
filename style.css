@@ -1,6 +1,6 @@
 /* ============================================================
    Weather App — Styles
-   Milestone 1: Page Shell & Theme Foundation
+   Milestone 3: Weather card + temperature accent colors
    ============================================================ */
 
 /* ── Design Tokens (Light mode) ──────────────────────────── */
@@ -317,7 +317,7 @@ main {
 .temp-unit {
   font-size: 20px;
   font-weight: 500;
-  color: var(--c-teal);
+  color: var(--c-accent);
   margin-left: 2px;
 }
 
@@ -329,11 +329,23 @@ main {
   color: var(--text-secondary);
 }
 
+/* condition-icon class set by JS so the stroke follows --c-accent */
+.condition-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--c-accent);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  flex-shrink: 0;
+}
+
+/* Fallback for the static SVG in index.html before JS replaces it */
 .condition svg {
   width: 20px;
   height: 20px;
   fill: none;
-  stroke: var(--c-teal);
+  stroke: var(--c-accent);
   stroke-width: 1.6;
   stroke-linecap: round;
 }
@@ -681,3 +693,48 @@ footer {
   .footer-inner       { flex-direction: column; }
   .footer-links       { align-items: flex-start; }
 }
+
+/* ── M3: Temperature accent color system ─────────────────── */
+/*
+  --c-accent drives: temp unit color, condition icon stroke,
+  stat icon strokes, and the left border highlight on the card.
+  Three ranges:
+    temp-cold  (≤ 5 °C)  → blue
+    temp-mild  (6–19 °C) → teal (default brand color)
+    temp-warm  (≥ 20 °C) → orange-red
+*/
+
+/* Default accent = teal (also covers the unclassed state before JS runs) */
+:root {
+  --c-accent: var(--c-teal);
+}
+
+.weather-card.temp-mild {
+  --c-accent: #1D9E75;   /* teal */
+}
+
+.weather-card.temp-cold {
+  --c-accent: #3B82F6;   /* blue-500 */
+  --c-accent-bg: rgba(59, 130, 246, 0.08);
+  border-left: 3px solid var(--c-accent);
+}
+
+.weather-card.temp-warm {
+  --c-accent: #F97316;   /* orange-500 */
+  --c-accent-bg: rgba(249, 115, 22, 0.08);
+  border-left: 3px solid var(--c-accent);
+}
+
+/* Subtle tinted background strip on the left of the temp value for warm/cold */
+.temp-value {
+  color: var(--c-accent);
+}
+
+/* Stat icons also follow the accent */
+.stat-label svg {
+  stroke: var(--c-accent);
+}
+
+/* Dark mode — slightly muted accent shades so they don't glare */
+[data-theme="dark"] .weather-card.temp-cold { --c-accent: #60A5FA; }
+[data-theme="dark"] .weather-card.temp-warm { --c-accent: #FB923C; }

@@ -150,52 +150,105 @@ async function loadWeather(city) {
 
 /* ── Data transform + render ─────────────────────────────── */
 function renderWeather(location, data) {
-  const { current, hourly, daily, timezone } = data;
+  const { current, hourly, daily } = data;
 
   // ── Current weather card ──
   const condition = wmoToCondition(current.weather_code);
-  const now = new Date();
+
+  // Use API time for accurate local date
+  const now = current.time
+    ? new Date(current.time)
+    : new Date();
 
   document.getElementById('cityName').textContent =
     `${location.name}, ${location.country}`;
+
   document.getElementById('dateText').textContent =
-    now.toLocaleDateString('en-GB', { weekday: 'long', month: 'short', day: 'numeric' });
+    now.toLocaleDateString('en-GB', {
+      weekday: 'long',
+      month: 'short',
+      day: 'numeric',
+    });
+
   document.getElementById('tempValue').textContent =
     Math.round(current.temperature_2m);
-  document.getElementById('conditionText').textContent = condition.label;
+
+  document.getElementById('conditionText').textContent =
+    condition.label;
+
   document.getElementById('humidity').textContent =
     `${current.relative_humidity_2m}%`;
+
   document.getElementById('windSpeed').textContent =
     `${Math.round(current.wind_speed_10m)} km/h`;
+
   document.getElementById('pressure').textContent =
     `${Math.round(current.surface_pressure)} hPa`;
 
-  // Update condition icon in the card
-  document.getElementById('conditionIcon').outerHTML =
-    `<svg id="conditionIcon" viewBox="0 0 24 24" style="width:20px;height:20px;fill:none;stroke:var(--c-teal);stroke-width:1.6;stroke-linecap:round;">${SVG_PATHS[condition.icon]}</svg>`;
+  // ── Temperature accent color system ──
+  weatherCard.classList.remove(
+    'temp-cold',
+    'temp-mild',
+    'temp-warm'
+  );
+
+  const temp = current.temperature_2m;
+
+  if (temp <= 5) {
+    weatherCard.classList.add('temp-cold');
+  } else if (temp >= 21) {
+    weatherCard.classList.add('temp-warm');
+  } else {
+    weatherCard.classList.add('temp-mild');
+  }
+
+  // ── Weather icon ──
+  document.getElementById('conditionIcon').outerHTML = `
+    <svg
+      id="conditionIcon"
+      class="condition-icon"
+      viewBox="0 0 24 24">
+      ${SVG_PATHS[condition.icon]}
+    </svg>
+  `;
 
   // ── 5-day forecast strip ──
   const days = daily.time.slice(0, 5).map((dateStr, i) => ({
-    label: i === 0 ? 'TODAY' : new Date(dateStr + 'T00:00:00')
-      .toLocaleDateString('en-GB', { weekday: 'short' }).toUpperCase(),
-    icon:  wmoToCondition(daily.weather_code[i]).icon,
-    hi:    Math.round(daily.temperature_2m_max[i]),
-    lo:    Math.round(daily.temperature_2m_min[i]),
+    label:
+      i === 0
+        ? 'TODAY'
+        : new Date(dateStr + 'T00:00:00')
+            .toLocaleDateString('en-GB', {
+              weekday: 'short',
+            })
+            .toUpperCase(),
+
+    icon: wmoToCondition(daily.weather_code[i]).icon,
+
+    hi: Math.round(daily.temperature_2m_max[i]),
+
+    lo: Math.round(daily.temperature_2m_min[i]),
   }));
+
   renderForecast(days);
 
-  // ── Hourly panel — next 6 hours from now ──
+  // ── Hourly panel — next 6 hours ──
   const currentHour = now.getHours();
   const hourlyEntries = [];
 
-  for (let i = 0; i < hourly.time.length && hourlyEntries.length < 6; i++) {
+  for (
+    let i = 0;
+    i < hourly.time.length && hourlyEntries.length < 6;
+    i++
+  ) {
     const hour = new Date(hourly.time[i]).getHours();
     const date = new Date(hourly.time[i]);
-    // Only future hours today
+
     if (date.toDateString() !== now.toDateString()) continue;
     if (hour <= currentHour) continue;
 
     const cond = wmoToCondition(hourly.weather_code[i]);
+
     hourlyEntries.push({
       time: `${String(hour).padStart(2, '0')}:00`,
       icon: cond.icon,
@@ -204,16 +257,24 @@ function renderWeather(location, data) {
     });
   }
 
-  // If fewer than 6 future hours today, pad from next day
+  // Pad from tomorrow if needed
   if (hourlyEntries.length < 6) {
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    for (let i = 0; i < hourly.time.length && hourlyEntries.length < 6; i++) {
+    for (
+      let i = 0;
+      i < hourly.time.length && hourlyEntries.length < 6;
+      i++
+    ) {
       const date = new Date(hourly.time[i]);
-      if (date.toDateString() !== tomorrow.toDateString()) continue;
+
+      if (
+        date.toDateString() !== tomorrow.toDateString()
+      ) continue;
 
       const cond = wmoToCondition(hourly.weather_code[i]);
+
       hourlyEntries.push({
         time: `${String(date.getHours()).padStart(2, '0')}:00`,
         icon: cond.icon,
